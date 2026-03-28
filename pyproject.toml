@@ -1,0 +1,21 @@
+[project]
+name = "agentic-customermind-gcp"
+version = "0.1.0"
+description = "Agentic AI Next-Best-Action pipeline on GCP"
+authors = [
+    {name = "Evan G",email = "evan.f.l.gloria@gmail.com"}
+]
+readme = "README.md"
+requires-python = "^3.10"
+dependencies = [
+    "google-cloud-bigquery (>=3.40.1,<4.0.0)",
+    "google-cloud-aiplatform (>=1.142.0,<2.0.0)",
+    "fastapi (>=0.135.2,<0.136.0)",
+    "uvicorn (>=0.42.0,<0.43.0)",
+    "python-dotenv (>=1.2.2,<2.0.0)"
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
