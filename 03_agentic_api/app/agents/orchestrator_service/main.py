@@ -5,6 +5,7 @@ from fastapi import FastAPI, HTTPException, Security, Depends
 from fastapi.responses import StreamingResponse
 from fastapi.security import APIKeyHeader
 from pydantic import BaseModel
+from typing import List, Dict, Any
 
 app = FastAPI(title="Campaign Orchestrator API Gateway")
 
@@ -16,6 +17,10 @@ def verify_api_key(api_key: str = Security(api_key_header)):
     if EXPECTED_API_KEY and api_key != EXPECTED_API_KEY:
         raise HTTPException(status_code=403, detail="Forbidden")
     return api_key
+
+class ChatPrompt(BaseModel):
+    prompt: str
+    history: List[Dict[str, Any]] = [] # 🌟 NEW
 
 class CampaignRequest(BaseModel):
     customer_id: int
@@ -155,3 +160,26 @@ async def fetch_live_offers(api_key: str = Depends(verify_api_key)):
             }
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Failed to fetch live offers: {str(e)}")
+        
+
+@app.post("/api/v1/chat")
+async def chat_with_data_agent(request: ChatPrompt, api_key: str = Depends(verify_api_key)):
+    """Routes chat requests to the Multi-Tool Strategist."""
+    try:
+        # Extract the base URLs dynamically
+        modeler_base = SERVICES["analytics"].split("/api/v1")[0]
+        strat_url = SERVICES["strategist"].split("/api/v1")[0] + "/api/v1/data-agent"
+        
+        payload = {
+            "prompt": request.prompt,
+            "modeler_url": modeler_base,
+            "history": request.history
+        }
+        
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            res = await client.post(strat_url, json=payload, headers={"X-API-Key": EXPECTED_API_KEY})
+            res.raise_for_status()
+            return res.json()
+            
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Agent Gateway Error: {str(e)}")

@@ -11,8 +11,11 @@ class PredictRequest(BaseModel):
 class CategoryRequest(BaseModel):
     category: str
 
+class SQLRequest(BaseModel):
+    query: str
+
 # ---------------------------------------------------------
-# PATH 1: Point Lookup (For Streamlit Tab 1)
+# Tool 1: Point Lookup (For Streamlit Tab 1)
 # ---------------------------------------------------------
 @app.post("/api/v1/predict")
 async def get_customer_segment(request: PredictRequest):
@@ -74,7 +77,7 @@ async def get_customer_segment(request: PredictRequest):
         raise HTTPException(status_code=500, detail=str(e))
     
 # ---------------------------------------------------------
-# PATH 2: Cohort Aggregation (For Streamlit Tab 2)
+# Tool 2: Cohort Aggregation (For Streamlit Tab 2)
 # ---------------------------------------------------------
 @app.post("/api/v1/cohort-analytics")
 async def get_cohort_demographics(request: CategoryRequest):
@@ -140,3 +143,44 @@ async def get_cohort_demographics(request: CategoryRequest):
         return {"top_cohorts": results}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    
+
+# ---------------------------------------------------------
+# Tool 3: Run SELECT Statements (For Streamlit Tab 3)
+# ---------------------------------------------------------
+
+@app.post("/api/v1/query-sandbox")
+async def secure_query_sandbox(request: SQLRequest):
+    """Executes read-only SQL safely. Returns errors as text so the LLM can self-correct."""
+    sql = request.query.strip()
+
+    # Remove markdown formatting if the LLM hallucinated code blocks
+    if sql.startswith("```"):
+        sql = sql.strip("`").removeprefix("sql").strip()
+        
+    # Remove the trailing semicolon so we can safely append to the query
+    if sql.endswith(";"):
+        sql = sql[:-1]
+    
+    # 🛡️ THE BOUNCER: Block destructive commands
+    forbidden_keywords = ["DROP ", "DELETE ", "UPDATE ", "INSERT ", "ALTER ", "GRANT ", "TRUNCATE "]
+    if any(word in sql.upper() for word in forbidden_keywords):
+        raise HTTPException(status_code=403, detail="Security Exception: Only SELECT queries are permitted.")
+    
+    # 🛡️ THE SEATBELT: Prevent massive data scans
+    if "LIMIT" not in sql.upper():
+        sql += " LIMIT 100"
+        
+    try:
+        client = bigquery.Client()
+        # Cap billing at 100MB per query just in case
+        job_config = bigquery.QueryJobConfig(maximum_bytes_billed=100000000) 
+        query_job = client.query(sql, job_config=job_config)
+        
+        results = [dict(row) for row in query_job]
+        return {"status": "success", "data": results}
+        
+    except Exception as e:
+        # We return 200 with the error text instead of crashing with a 500. 
+        # This allows the LLM to read the syntax error and try again!
+        return {"status": "error", "message": str(e)}
