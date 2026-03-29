@@ -1,9 +1,26 @@
 import streamlit as st
 import requests
 import time
+import json
 
 # --- PAGE CONFIGURATION ---
 st.set_page_config(page_title="Agentic AI Portfolio", page_icon="🧠", layout="wide")
+
+# --- CSS ANIMATION ---
+st.markdown("""
+<style>
+.loading-dots::after {
+  content: '.';
+  animation: dots 1.5s steps(5, end) infinite;
+}
+@keyframes dots {
+  0%, 20% { color: rgba(0,0,0,0); text-shadow: .25em 0 0 rgba(0,0,0,0), .5em 0 0 rgba(0,0,0,0); }
+  40% { color: inherit; text-shadow: .25em 0 0 rgba(0,0,0,0), .5em 0 0 rgba(0,0,0,0); }
+  60% { text-shadow: .25em 0 0 inherit, .5em 0 0 rgba(0,0,0,0); }
+  80%, 100% { text-shadow: .25em 0 0 inherit, .5em 0 0 inherit; }
+}
+</style>
+""", unsafe_allow_html=True)
 
 # --- HEADER ---
 st.title("🧠 Enterprise Multi-Agent Orchestration")
@@ -27,8 +44,16 @@ with st.sidebar:
     api_key = st.text_input("Master API Key", type="password", help="Enter the secure API key to authenticate.")
     
     st.markdown("---")
-    st.markdown("### 🛠️ Architecture Diagram")
-    st.caption("UI → API Gateway → [Modeler, Profiler, Strategist, Reviewer]")
+    st.markdown("### 🛠️ Microservice Architecture")
+    st.caption("**UI → API Gateway → Distributed Agents**")
+    st.markdown("""
+    <div style="font-size: 0.85em; color: #a3a8b8;">
+    <b>1. 🟢 Modeler:</b> BigQuery Data Extraction <br>
+    <b>2. 🧠 Profiler:</b> Gemini 2.5 Flash Persona <br>
+    <b>3. ✍️ Strategist:</b> Gemini 2.5 Flash Campaign <br>
+    <b>4. ⚖️ Reviewer:</b> Llama 3.3 Strict Auditing
+    </div>
+    """, unsafe_allow_html=True)
 
 # --- MAIN INTERFACE ---
 st.markdown("### 🏁 Execute Campaign Pipeline")
@@ -50,33 +75,73 @@ if execute_btn:
     payload = {"customer_id": int(customer_id)}
     
     start_time = time.time()
+    final_data = {} 
     
-    # We only need one status spinner now, because the backend handles the sequence!
-    with st.status("🚀 Calling API Gateway and running AI pipeline...", expanded=True) as status:
-        st.write("Delegating orchestration to the backend microservices...")
+    with st.status("🚀 Orchestrator API Gateway Connected...", expanded=True) as status:
+        
+        # 🌟 NEW: Create a dynamic placeholder block
+        ui_placeholder = st.empty()
+        tracked_steps = []
+        
         try:
-            # The single, asynchronous-backed API call
-            response = requests.post(orchestrator_url, json=payload, headers=headers)
-            
-            if response.status_code == 200:
-                data = response.json().get("pipeline_results", {})
-                status.update(label="✅ Pipeline Execution Complete!", state="complete", expanded=False)
-            else:
-                st.error(f"Gateway Error {response.status_code}: {response.text}")
-                st.stop()
+            with requests.post(orchestrator_url, json=payload, headers=headers, stream=True) as response:
+                
+                if response.status_code != 200:
+                    st.error(f"Gateway Error {response.status_code}")
+                    st.stop()
+                    
+                for line in response.iter_lines():
+                    if line:
+                        decoded_line = line.decode('utf-8')
+                        stream_data = json.loads(decoded_line)
+                        
+                        if stream_data.get("status") == "update":
+                            # Add the newest step to our tracker
+                            tracked_steps.append(stream_data.get("message"))
+                            
+                            # Re-render the entire block
+                            display_text = ""
+                            for i, step in enumerate(tracked_steps):
+                                
+                                # Split at the first space to safely isolate the text from ANY emoji
+                                parts = step.split(" ", 1)
+                                clean_text = parts[1] if len(parts) > 1 else step
+                                
+                                if i == len(tracked_steps) - 1:
+                                    # Use the CSS class for the animated dots!
+                                    display_text += f"⏳ <i>{clean_text}<span class='loading-dots'></span></i><br><br>" 
+                                else:
+                                    display_text += f"✅ **{clean_text}**\n\n"
+                                    
+                            # Overwrite the placeholder with the new UI state
+                            ui_placeholder.markdown(display_text, unsafe_allow_html=True)
+                            
+                        elif stream_data.get("status") == "complete":
+                            display_text = ""
+                            for step in tracked_steps:
+                                parts = step.split(" ", 1)
+                                clean_text = parts[1] if len(parts) > 1 else step
+                                display_text += f"✅ **{clean_text}**\n\n"
+                                
+                            ui_placeholder.markdown(display_text, unsafe_allow_html=True)
+                            
+                            final_data = stream_data.get("pipeline_results", {})
+                            status.update(label="✅ Pipeline Execution Complete!", state="complete", expanded=False)
+                            
         except Exception as e:
             st.error(f"Connection Error: {e}")
+            status.update(label="❌ Connection Failed.", state="error")
             st.stop()
 
     # --- FINAL DISPLAY ---
     duration = round(time.time() - start_time, 2)
     st.success(f"End-to-end pipeline executed successfully in {duration} seconds.")
     
-    # Extracting variables from the nested Orchestrator payload
-    segment_data = data.get("segment_data", {})
-    persona_brief = data.get("persona_brief", "No brief generated.")
-    strategy = data.get("executable_strategy", "No strategy generated.")
-    audit = data.get("audit_results", "No audit results.")
+    # Extracting variables from the final payload
+    segment_data = final_data.get("segment_data", {})
+    persona_brief = final_data.get("persona_brief", "No brief generated.")
+    strategy = final_data.get("executable_strategy", "No strategy generated.")
+    audit = final_data.get("audit_results", "No audit results.")
 
     # Layout for results
     st.markdown(f"### 📊 Customer Insights: {segment_data.get('segment_name', 'Unknown Segment')}")
