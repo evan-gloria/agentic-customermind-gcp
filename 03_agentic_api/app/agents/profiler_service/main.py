@@ -8,15 +8,18 @@ app = FastAPI(title="Profiler Agent API")
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=True)
 EXPECTED_API_KEY = os.getenv("API_KEY")
 
+
+class ProfilerRequest(BaseModel):
+    customer_id: int
+    model_context: dict  # This catches the cluster ID, segment name, and Kaggle features
+
+class PersonaGenerationRequest(BaseModel):
+    stats: list
+
 def verify_api_key(api_key: str = Security(api_key_header)):
     if api_key != EXPECTED_API_KEY:
         raise HTTPException(status_code=403, detail="Forbidden")
     return api_key
-
-# We update the request model to accept the payload from Agent 1
-class ProfilerRequest(BaseModel):
-    customer_id: int
-    model_context: dict  # This catches the cluster ID, segment name, and Kaggle features
 
 @app.post("/api/v1/profile")
 async def generate_profile(request: ProfilerRequest, api_key: str = Depends(verify_api_key)):
@@ -52,3 +55,35 @@ async def generate_profile(request: ProfilerRequest, api_key: str = Depends(veri
         return {"status": "success", "persona_brief": response.text}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    
+@app.post("/api/v1/generate-personas")
+async def generate_personas(request: PersonaGenerationRequest, api_key: str = Depends(verify_api_key)):
+    """Takes raw cluster demographics and uses Gemini to assign Marketing Persona names."""
+    try:
+        model_name = os.getenv("GEMINI_MODEL_NAME", "gemini-2.5-flash")
+        
+        prompt = f"""
+        You are an expert Marketing Strategist. I have run a K-Means clustering algorithm on our Australian customer database and found 5 segments. 
+        Here are the average demographic and spending statistics for each segment:
+        
+        {json.dumps(request.stats, indent=2)}
+        
+        Provide a professional, concise marketing persona name (e.g., "High-Value Tech Professional", "Budget-Conscious Student") for each segment.
+        You MUST return ONLY a valid JSON dictionary where the keys are the centroid_id (as strings "1", "2", etc.) and the values are the segment names. 
+        """
+        
+        agent = GenerativeModel(model_name)
+        
+        # 🚨 THE ARCHITECT'S SECRET: Force Gemini into strict JSON mode 
+        # so it doesn't accidentally output conversational text and crash your pipeline!
+        generation_config = {"response_mime_type": "application/json"}
+        
+        response = agent.generate_content(prompt, generation_config=generation_config)
+        
+        # Parse the JSON string from Gemini into a real Python dictionary
+        persona_mapping = json.loads(response.text)
+        
+        return {"status": "success", "personas": persona_mapping}
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Gemini Profiling Error: {str(e)}")

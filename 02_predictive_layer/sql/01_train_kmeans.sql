@@ -12,4 +12,5 @@ SELECT
   Total_Spend, 
   Total_Purchases,
   Total_Campaigns_Accepted
-FROM `customermind_ai.v_customer_features`;
+FROM `customermind_ai.v_customer_features`
+WHERE RAND() < 0.01; -- This single line is what restricts the engine to a 1% sample

@@ -22,15 +22,6 @@ def fetch_live_offers_from_gateway(url, key):
 # --- PAGE CONFIGURATION ---
 st.set_page_config(page_title="Agentic AI Portfolio", page_icon="🧠", layout="wide")
 
-# --- MOCK DATA (For Portfolio Demo) ---
-live_offers = [
-    {"id": "ozb-001", "title": "Woolworths Everyday Mobile: 50% Off First 3 Months", "category": "Telco"},
-    {"id": "ozb-002", "title": "Qantas: Double Status Credits on Flights to Tokyo", "category": "Travel"},
-    {"id": "ozb-003", "title": "Amazon AU: $10 Bonus Credit on $50 Gift Cards", "category": "Retail"},
-    {"id": "ozb-004", "title": "Dell: 40% off XPS 15 Laptops", "category": "Tech"},
-    {"id": "ozb-005", "title": "Coles: 10,000 Flybuys points on $100 spend", "category": "Groceries"}
-]
-
 # --- CSS ANIMATION ---
 st.markdown("""
 <style>
@@ -47,51 +38,116 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+
+# -----------------------------------------------------------------------------
+# 🔒 Security: Secret Management & Environment Variables
+# This logic first checks Streamlit's native secrets manager (for Streamlit Cloud)
+# and falls back to standard OS environment variables (for Docker / GCP Cloud Run).
+# -----------------------------------------------------------------------------
+
+def get_api_key():
+    # 1. Try Streamlit Secrets First
+    try:
+        if "API_KEY" in st.secrets:
+            return st.secrets["API_KEY"]
+    except FileNotFoundError:
+        pass # Ignore if the secrets.toml file doesn't exist locally
+
+    # 2. Fallback to OS Environment Variables
+    env_key = os.getenv("API_KEY")
+    if env_key:
+        return env_key
+        
+    # 3. Fail gracefully if neither is found
+    return None
+
+
+
+
 # --- HEADER ---
-st.title("🧠 Enterprise Multi-Agent Orchestration")
-st.markdown("**Distributed Microservices Architecture** | *API Gateway Pattern*")
+st.title("🧠 Customer Intelligence Platform")
+st.markdown("**Enterprise AI Marketing Hub** | *Powered by Distributed Agents & BigQuery*")
 st.divider()
 
-# --- SIDEBAR (Configuration) ---
+# --- SIDEBAR (Configuration & Guide) ---
 with st.sidebar:
-    st.header("⚙️ System Configuration")
-    st.info("Point this UI to your central Orchestrator API Gateway.")
-    
+    # Platform Access
+    api_key=get_api_key()
     orchestrator_url = os.getenv("URL_ORCHESTRATOR", "http://127.0.0.1:8000")
-    
-    st.divider()
-    api_key = st.text_input("Master API Key", type="password", help="Enter the secure API key to authenticate.")
+
+    st.markdown("### 🗺️ Platform Navigation")
+    st.markdown("""
+    <div style="font-size: 0.9em; margin-bottom: 15px;">
+    <b>🎯 Persona Strategy Builder</b><br>
+    Generate hyper-personalized, 1-to-1 marketing campaigns for individual users.<br><br>
+    <b>📊 Campaign Viability Engine</b><br>
+    Forecast audience reach and demographic fit for live market offers.<br><br>
+    <b>🧠 AI Marketing Copilot</b><br>
+    Chat directly with the data warehouse using natural language.
+    </div>
+    """, unsafe_allow_html=True)
     
     st.markdown("---")
-    st.markdown("### 🛠️ Microservice Architecture")
-    st.caption("**UI → API Gateway → Distributed Agents**")
+    st.markdown("### 🤖 Engine Capabilities")
+    st.caption("**The autonomous agents powering this platform:**")
     st.markdown("""
     <div style="font-size: 0.85em; color: #a3a8b8;">
-    <b>1. 🟢 Modeler:</b> BigQuery Data Extraction <br>
-    <b>2. 🧠 Profiler:</b> Gemini 2.5 Flash Persona <br>
-    <b>3. ✍️ Strategist:</b> Gemini 2.5 Flash Campaign <br>
-    <b>4. ⚖️ Reviewer:</b> Llama 3.3 Strict Auditing
+    <b>1. 🟢 Data Engine:</b> Securely extracts and scores enterprise BigQuery profiles.<br><br>
+    <b>2. 🧠 Persona AI:</b> Translates raw demographics into deep psychological profiles.<br><br>
+    <b>3. ✍️ Campaign AI:</b> Scans live web feeds to draft targeted, high-conversion copy.<br><br>
+    <b>4. ⚖️ Compliance AI:</b> Strictly audits all outputs for brand safety and tone.
     </div>
     """, unsafe_allow_html=True)
 
+    st.markdown("---")
+    # Add a tooltip explaining what this heavy action does
+    st.markdown(
+        """<span style="font-size: 0.85em; color: gray;">
+        Trigger the MLOps pipeline to retrain the K-Means model on fresh BigQuery data and instruct the Profiler AI to generate new segment personas.
+        </span>""", 
+        unsafe_allow_html=True
+    )
+    
+    if st.button("🔄 Retrain AI Segments", type="primary", use_container_width=True):
+        with st.spinner("Initiating Multi-Agent Workflow..."):
+            try:
+                headers = {"X-API-Key": api_key}
+                # Call the Orchestrator's new tool endpoint
+                response = requests.post(f"{orchestrator_url}/tools/refresh-segments", headers=headers)
+                
+                if response.status_code == 200:
+                    # Use Streamlit's toast feature for a clean, non-intrusive notification
+                    st.toast("✅ Pipeline triggered successfully! Background retraining will take ~2 minutes.", icon="🚀")
+                else:
+                    st.error(f"Failed to trigger pipeline: {response.text}")
+                    
+            except Exception as e:
+                st.error(f"Connection Error: {str(e)}")
+
 # --- TABS INITIALIZATION ---
 if not api_key:
-    st.warning("👈 Please enter your Master API Key in the sidebar to unlock the dashboard.")
+    st.error("🚨 Security Error: API_KEY is missing from the environment. Please check your deployment secrets.")
+    st.stop() # Halts the app so the user can't interact with a broken state
 else:
-    tab1, tab2 = st.tabs(["👤 Audience-Led (Pipeline)", "🛒 Offer-Led (BigQuery Analytics)"])
+    tab1, tab2, tab3 = st.tabs([
+        "🎯 Persona Strategy Builder", 
+        "📊 Campaign Viability Engine", 
+        "🧠 AI Marketing Copilot"
+    ])
 
     # ==========================================
-    # TAB 1: THE PIPELINE ENGINE
+    # TAB 1: THE PIPELINE ENGINE (Persona Strategy Builder)
     # ==========================================
     with tab1:
-        st.markdown("### 🏁 Execute Campaign Pipeline")
+        st.markdown("### 🎯 Persona Strategy Builder")
+        st.info("**The Goal:** Transform raw customer data into a ready-to-send, highly personalized marketing campaign.\n\n**How it works:** Enter a Customer ID to trigger an autonomous AI workflow. The platform extracts their data, builds a psychological profile, scouts live market deals, and drafts a targeted email with auditing capability for brand safety.")
         col1, col2, col3 = st.columns([1, 1, 2])
         with col1:
             customer_id = st.number_input("Enter Customer ID", min_value=1, value=4141, step=1)
         with col2:
             st.write("") 
             st.write("") 
-            execute_btn = st.button("Run AI Factory 🚀", type="primary", use_container_width=True)
+            execute_btn = st.button("Customer Analysis 💡", type="primary", use_container_width=True)
 
         if execute_btn:
             headers = {"Content-Type": "application/json", "X-API-Key": api_key}
@@ -164,13 +220,13 @@ else:
                 st.markdown(strategy)
 
     # ==========================================
-    # TAB 2: THE NEW OZBARGAIN ENGINE
+    # TAB 2: THE NEW OZBARGAIN ENGINE (Campaign Viability Engine)
     # ==========================================
     with tab2:
         header_col, btn_col = st.columns([4, 1])
         with header_col:
-            st.markdown("### 🛒 Campaign Viability Engine")
-            st.write("Scan the database to find the eligible audience for a live market offer.")
+            st.markdown("### 📊 Campaign Viability Engine")
+            st.info("**The Goal:** Validate whether a specific market offer has a large enough audience to be profitable.\n\n**How it works:** Select a live market deal to run a real-time Machine Learning model (`ML.PREDICT`) across the customer database. The engine instantly calculates the exact size, demographics, and expected revenue of the most viable target audience.")
         with btn_col:
             st.write("") # Spacing alignment
             if st.button("🔄 Refresh Deals", use_container_width=True):
@@ -228,7 +284,7 @@ else:
                                             parts = step.split(" ", 1)
                                             clean_text = parts[1] if len(parts) > 1 else step
                                             if i == len(tracked_steps) - 1:
-                                                display_text += f"⏳ <i>{clean_text} <span class='loading-dots'></span></i><br><br>" 
+                                                display_text += f"⏳ <i>{clean_text}<span class='loading-dots'></span></i><br><br>" 
                                             else:
                                                 display_text += f"✅ **{clean_text}**\n\n"
                                         ui_placeholder.markdown(display_text, unsafe_allow_html=True)
@@ -292,3 +348,87 @@ else:
                         
                 else:
                     st.warning("No significant cohort matches found for this category.")
+
+    # ==========================================
+    # TAB 3: SELF-SERVICE DATA AGENT (AI Marketing Copilot)
+    # ==========================================
+    with tab3:
+        st.markdown("### 💬 AI Marketing Copilot")
+        st.info("**The Goal:** Bypass SQL and Jira tickets. Get instant answers to complex strategic questions.\n\n**How it works:** Use natural language to ask questions. The autonomous agent will securely write SQL, query the BigQuery data warehouse, and fetch live web data to give you instant, strategic answers.")
+        st.write("Ask the AI to query the customer database or check live market offers for you.")
+    
+        # 1. Initialize the chat memory in the browser
+        if "messages" not in st.session_state:
+            st.session_state.messages = []
+            
+        # 2. Create the container BEFORE drawing anything
+        chat_container = st.container()
+                
+        # 3. Draw historical messages ONLY ONCE, strictly inside the container
+        with chat_container:
+            for msg in st.session_state.messages:
+                with st.chat_message(msg["role"]):
+                    st.markdown(msg["content"])
+
+        # 4. Logic to handle prompt starters
+        prompt = None 
+        
+        # 🌟 The indentation here ensures the text AND buttons hide together!
+        if len(st.session_state.messages) == 0:
+            st.write("") 
+            st.caption("💡 **Suggested Queries:**")
+            col1, col2, col3 = st.columns(3)
+            
+            if col1.button("📊 Database Math", use_container_width=True):
+                prompt = "What is the average income of our most loyal customers?"
+            if col2.button("🛒 Live Market Scan", use_container_width=True):
+                prompt = "Are there any live travel deals on OzBargain right now?"
+            if col3.button("🧠 Multi-Tool Strategy", use_container_width=True):
+                prompt = "Find a live Tech deal on OzBargain, and tell me how many customers we have making over $100,000 to target it to."
+
+        # 5. The Chat Input Box (Pinned to the bottom)
+        user_input = st.chat_input("E.g., What is the average income of the Tech segment?")
+        if user_input:
+            prompt = user_input
+                
+        # 6. Trigger the Agent if a prompt was fired
+        if prompt:
+            # Display user message instantly inside the container
+            st.session_state.messages.append({"role": "user", "content": prompt})
+            with chat_container:
+                with st.chat_message("user"):
+                    st.markdown(prompt)
+                    
+                # Trigger the Agent and show spinner inside the container
+                with st.chat_message("assistant"):
+                    with st.spinner("🤖 Agent is reasoning, querying tools, and writing SQL..."):
+                        try:
+                            # Safely extract the last 4 messages for memory
+                            recent_history = st.session_state.messages[:-1][-4:]
+                            
+                            payload = {
+                                "prompt": prompt,
+                                "history": recent_history
+                            }
+                            
+                            res = requests.post(
+                                f"{orchestrator_url}/api/v1/chat",
+                                json=payload,
+                                headers={"X-API-Key": api_key}
+                            )
+                            
+                            if res.status_code == 200:
+                                reply = res.json().get("response", "No response generated.")
+                                st.markdown(reply)
+                                
+                                # Save assistant reply to memory
+                                st.session_state.messages.append({"role": "assistant", "content": reply})
+                                
+                                # Force redraw to clean up state
+                                st.rerun()
+                                
+                            else:
+                                st.error(f"Backend Error: {res.text}")
+                                
+                        except Exception as e:
+                            st.error(f"Connection Error: {e}")

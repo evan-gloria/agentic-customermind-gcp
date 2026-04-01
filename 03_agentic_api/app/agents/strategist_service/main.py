@@ -4,6 +4,8 @@ from pydantic import BaseModel
 import feedparser
 from vertexai.generative_models import GenerativeModel, Tool, FunctionDeclaration, Part
 import os
+import httpx
+from typing import List, Dict, Any
 
 app = FastAPI(title="Strategist Agent API")
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=True)
@@ -22,6 +24,11 @@ class CohortInsightRequest(BaseModel):
     offer_category: str
     cohort_data: list
 
+class DataAgentRequest(BaseModel):
+    prompt: str
+    modeler_url: str  # The Orchestrator will tell the Agent where the database sandbox is
+    history: List[Dict[str, Any]] = []
+
 # 1. Define the Tool
 def fetch_ozbargain_deals() -> str:
     feed = feedparser.parse("https://www.ozbargain.com.au/feed")
@@ -34,6 +41,23 @@ oz_func = FunctionDeclaration(
     parameters={"type": "object", "properties": {}}
 )
 deal_hunter_tool = Tool(function_declarations=[oz_func])
+
+
+# 2. Define the BigQuery Tool
+bq_func = FunctionDeclaration(
+    name="query_database",
+    description="Executes a read-only Google Standard SQL query against the customer database.",
+    parameters={
+        "type": "object",
+        "properties": {
+            "sql_query": {"type": "string", "description": "The exact SQL SELECT query to execute."}
+        },
+        "required": ["sql_query"]
+    }
+)
+
+# 3. Combine both tools into one Toolbelt! (Assuming oz_func is still defined at the top of this file)
+agent_toolbelt = Tool(function_declarations=[oz_func, bq_func])
 
 @app.post("/api/v1/strategize")
 async def generate_strategy(request: StrategistRequest, api_key: str = Depends(verify_api_key)):
@@ -124,5 +148,72 @@ async def get_live_deals():
                 "link": entry.link
             })
         return {"offers": deals}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/v1/data-agent")
+async def run_data_agent(request: DataAgentRequest, api_key: str = Depends(verify_api_key)):
+    try:
+        system_instruction = """
+        You are an elite Data & Marketing Agent. You have two tools:
+        1. `fetch_ozbargain_deals`: Fetches live market offers.
+        2. `query_database`: Runs SQL on the `customermind_ai.v_agent_semantic_layer` table.
+        
+        DATABASE SCHEMA:
+        - CustomerID (STRING)
+        - Age (INT64)
+        - Income (INT64)
+        - NumWebVisitsMonth (INT64)
+        - Total_Spend (FLOAT64)
+        - segment_name (STRING) - E.g., 'High-Value Tech Professional'
+
+        RULES:
+        - NEVER guess data. ALWAYS use `query_database` to answer data questions.
+        - You are strictly querying a flat view. Do NOT attempt to write JOIN statements.
+        - If your SQL query returns an error, read the error and rewrite your SQL to fix it.
+        """
+        model_name = os.getenv("GEMINI_MODEL_NAME", "gemini-2.5-flash")
+        agent = GenerativeModel(model_name, tools=[agent_toolbelt], system_instruction=system_instruction)
+        chat = agent.start_chat()
+
+        memory_context = ""
+        if request.history:
+            memory_context = "PREVIOUS CONVERSATION CONTEXT:\n"
+            for msg in request.history:
+                role = "User" if msg["role"] == "user" else "Assistant"
+                memory_context += f"{role}: {msg['content']}\n"
+            memory_context += "\nCURRENT PROMPT TO ANSWER:\n"
+
+        # Combine them
+        full_prompt = f"{memory_context}{request.prompt}"
+        
+        response = chat.send_message(full_prompt)
+        
+        # 3. The Autonomous Agent Loop
+        MAX_LOOPS = 4
+        loop_count = 0
+        
+        while response.candidates and response.candidates[0].function_calls and loop_count < MAX_LOOPS:
+            loop_count += 1
+            tool_responses = []
+            
+            for call in response.candidates[0].function_calls:
+                if call.name == "fetch_ozbargain_deals":
+                    result = fetch_ozbargain_deals()
+                    tool_responses.append(Part.from_function_response(name="fetch_ozbargain_deals", response={"content": result}))
+                    
+                elif call.name == "query_database":
+                    sql = call.args.get("sql_query")
+                    # Make a secure internal HTTP call to the Modeler Service
+                    with httpx.Client() as client:
+                        res = client.post(f"{request.modeler_url}/api/v1/query-sandbox", json={"query": sql}, timeout=20.0)
+                        db_result = res.json()
+                    tool_responses.append(Part.from_function_response(name="query_database", response=db_result))
+                    
+            # Send the tool outputs back to the LLM so it can continue reasoning
+            response = chat.send_message(tool_responses)
+            
+        return {"response": response.text}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
