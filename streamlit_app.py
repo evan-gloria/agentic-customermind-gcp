@@ -38,6 +38,32 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+
+# -----------------------------------------------------------------------------
+# 🔒 Security: Secret Management & Environment Variables
+# This logic first checks Streamlit's native secrets manager (for Streamlit Cloud)
+# and falls back to standard OS environment variables (for Docker / GCP Cloud Run).
+# -----------------------------------------------------------------------------
+
+def get_api_key():
+    # 1. Try Streamlit Secrets First
+    try:
+        if "API_KEY" in st.secrets:
+            return st.secrets["API_KEY"]
+    except FileNotFoundError:
+        pass # Ignore if the secrets.toml file doesn't exist locally
+
+    # 2. Fallback to OS Environment Variables
+    env_key = os.getenv("API_KEY")
+    if env_key:
+        return env_key
+        
+    # 3. Fail gracefully if neither is found
+    return None
+
+
+
+
 # --- HEADER ---
 st.title("🧠 Customer Intelligence Platform")
 st.markdown("**Enterprise AI Marketing Hub** | *Powered by Distributed Agents & BigQuery*")
@@ -45,12 +71,10 @@ st.divider()
 
 # --- SIDEBAR (Configuration & Guide) ---
 with st.sidebar:
-    st.header("⚙️ Platform Access")
-    
+    # Platform Access
+    api_key=get_api_key()
     orchestrator_url = os.getenv("URL_ORCHESTRATOR", "http://127.0.0.1:8000")
-    api_key = st.text_input("Secure API Key", type="password", help="Enter your credentials to access the AI gateway.")
-    
-    st.markdown("---")
+
     st.markdown("### 🗺️ Platform Navigation")
     st.markdown("""
     <div style="font-size: 0.9em; margin-bottom: 15px;">
@@ -75,9 +99,35 @@ with st.sidebar:
     </div>
     """, unsafe_allow_html=True)
 
+    st.markdown("---")
+    # Add a tooltip explaining what this heavy action does
+    st.markdown(
+        """<span style="font-size: 0.85em; color: gray;">
+        Trigger the MLOps pipeline to retrain the K-Means model on fresh BigQuery data and instruct the Profiler AI to generate new segment personas.
+        </span>""", 
+        unsafe_allow_html=True
+    )
+    
+    if st.button("🔄 Retrain AI Segments", type="primary", use_container_width=True):
+        with st.spinner("Initiating Multi-Agent Workflow..."):
+            try:
+                headers = {"X-API-Key": api_key}
+                # Call the Orchestrator's new tool endpoint
+                response = requests.post(f"{orchestrator_url}/tools/refresh-segments", headers=headers)
+                
+                if response.status_code == 200:
+                    # Use Streamlit's toast feature for a clean, non-intrusive notification
+                    st.toast("✅ Pipeline triggered successfully! Background retraining will take ~2 minutes.", icon="🚀")
+                else:
+                    st.error(f"Failed to trigger pipeline: {response.text}")
+                    
+            except Exception as e:
+                st.error(f"Connection Error: {str(e)}")
+
 # --- TABS INITIALIZATION ---
 if not api_key:
-    st.warning("👈 Please enter your Master API Key in the sidebar to unlock the dashboard.")
+    st.error("🚨 Security Error: API_KEY is missing from the environment. Please check your deployment secrets.")
+    st.stop() # Halts the app so the user can't interact with a broken state
 else:
     tab1, tab2, tab3 = st.tabs([
         "🎯 Persona Strategy Builder", 
@@ -97,7 +147,7 @@ else:
         with col2:
             st.write("") 
             st.write("") 
-            execute_btn = st.button("Run AI Factory 🚀", type="primary", use_container_width=True)
+            execute_btn = st.button("Customer Analysis 💡", type="primary", use_container_width=True)
 
         if execute_btn:
             headers = {"Content-Type": "application/json", "X-API-Key": api_key}

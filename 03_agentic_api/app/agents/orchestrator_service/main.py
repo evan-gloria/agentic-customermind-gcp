@@ -1,13 +1,15 @@
 import json
 import httpx
 import os
-from fastapi import FastAPI, HTTPException, Security, Depends
+import requests
+from fastapi import FastAPI, HTTPException, Security, Depends, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from fastapi.security import APIKeyHeader
 from pydantic import BaseModel
 from typing import List, Dict, Any
 
 app = FastAPI(title="Campaign Orchestrator API Gateway")
+
 
 # Security
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=True)
@@ -43,7 +45,7 @@ SERVICES = {
 async def run_campaign_pipeline(request: CampaignRequest, api_key: str = Depends(verify_api_key)):
     headers = {"Content-Type": "application/json", "X-API-Key": EXPECTED_API_KEY}
     
-    # 🌟 NEW: The Async Generator for Streaming
+    # NEW: The Async Generator for Streaming
     async def event_stream():
         # We put the client inside the generator so it stays open while streaming
         async with httpx.AsyncClient(timeout=60.0) as client:
@@ -85,7 +87,7 @@ async def run_campaign_pipeline(request: CampaignRequest, api_key: str = Depends
                 }
                 yield json.dumps(final_payload) + "\n"
 
-            # 🌟 NEW: Graceful error streaming
+            # NEW: Graceful error streaming
             except httpx.HTTPStatusError as e:
                 error_msg = {"status": "error", "message": f"Pipeline Failed at {e.request.url}: {e.response.text}"}
                 yield json.dumps(error_msg) + "\n"
@@ -183,3 +185,46 @@ async def chat_with_data_agent(request: ChatPrompt, api_key: str = Depends(verif
             
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Agent Gateway Error: {str(e)}")
+    
+def execute_refresh_workflow():
+    """Background task executed by the Orchestrator"""
+    
+    # Define the service URLs
+    data_query_service = SERVICES["modeler"].replace("/predict", "/train-model-and-get-stats")
+    customer_profile_service = SERVICES["profiler"].replace("/profile", "/generate-personas")
+    data_saved_service = SERVICES["modeler"].replace("/predict", "/materialize-semantic-layer")
+    
+    internal_headers = {"Content-Type": "application/json", "X-API-Key": EXPECTED_API_KEY}
+    
+    try:
+        print("1. Telling Data Modeler to train K-Means and fetch stats...")
+        response_1 = requests.post(data_query_service, headers=internal_headers)
+        response_1.raise_for_status()
+        raw_stats = response_1.json().get("stats") 
+        
+        print("2. Sending raw stats to Profiler Service for Gemini to name...")
+        response_2 = requests.post(customer_profile_service, json={"stats": raw_stats}, headers=internal_headers)
+        response_2.raise_for_status()
+        persona_mapping = response_2.json().get("personas") 
+        
+        print("3. Sending Gemini's names back to Data Modeler to update BigQuery...")
+        response_3 = requests.post(data_saved_service, json={"personas": persona_mapping}, headers=internal_headers)
+        response_3.raise_for_status()
+        
+        print("Workflow Complete!")
+    except Exception as e:
+        print(f"Background Workflow Failed: {str(e)}")
+
+@app.post("/tools/refresh-segments")
+async def trigger_refresh_tool(background_tasks: BackgroundTasks, api_key: str = Depends(verify_api_key)):
+    """
+    The tool endpoint that your main LLM agent calls when 
+    the user asks to refresh the data.
+    """
+    # Run the heavy workflow in the background
+    background_tasks.add_task(execute_refresh_workflow)
+    
+    return {
+        "status": "success",
+        "message": "I have initiated the background workflow. The Data Modeler is currently retraining the database, and the Profiler is standing by to evaluate the new segments."
+    }

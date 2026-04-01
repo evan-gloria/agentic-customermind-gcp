@@ -3,6 +3,7 @@ SELECT
         CustomerID AS customer_id,
         CAST(age AS FLOAT64) AS age_num,
         CAST(income AS FLOAT64) AS income_num,
+        -- This case statement is for reference. This segment will be dynamic every time we refresh the model
         CASE Centroid_ID
             WHEN 1 THEN 'High-Value Tech Professional'
             WHEN 2 THEN 'Conservative Retiree'
