@@ -45,22 +45,14 @@ st.markdown("""
 # and falls back to standard OS environment variables (for Docker / GCP Cloud Run).
 # -----------------------------------------------------------------------------
 
-def get_api_key():
-    # 1. Try Streamlit Secrets First
-    try:
-        if "API_KEY" in st.secrets:
-            return st.secrets["API_KEY"]
-    except FileNotFoundError:
-        pass # Ignore if the secrets.toml file doesn't exist locally
-
-    # 2. Fallback to OS Environment Variables
-    env_key = os.getenv("API_KEY")
-    if env_key:
-        return env_key
-        
-    # 3. Fail gracefully if neither is found
-    return None
-
+try:
+    # 1. Try Streamlit Cloud Secrets
+    CONF_API_KEY = st.secrets["API_KEY"]
+    CONF_ORCHESTRATOR_URL = st.secrets["URL_ORCHESTRATOR"]
+except (FileNotFoundError, KeyError):
+    # 2. Fallback to Local/Docker OS Variables
+    CONF_API_KEY = os.getenv("API_KEY")
+    CONF_ORCHESTRATOR_URL = os.getenv("URL_ORCHESTRATOR", "http://127.0.0.1:8000")
 
 
 
@@ -69,11 +61,14 @@ st.title("🧠 Customer Intelligence Platform")
 st.markdown("**Enterprise AI Marketing Hub** | *Powered by Distributed Agents & BigQuery*")
 st.divider()
 
+
+
 # --- SIDEBAR (Configuration & Guide) ---
 with st.sidebar:
+    
     # Platform Access
-    api_key=get_api_key()
-    orchestrator_url = os.getenv("URL_ORCHESTRATOR", "http://127.0.0.1:8000")
+    api_key=CONF_API_KEY
+    orchestrator_url = CONF_ORCHESTRATOR_URL
 
     st.markdown("### 🗺️ Platform Navigation")
     st.markdown("""
@@ -123,6 +118,39 @@ with st.sidebar:
                     
             except Exception as e:
                 st.error(f"Connection Error: {str(e)}")
+    
+    st.markdown("---")
+    
+    # 👨‍💻 Author & GitHub Link
+    st.markdown(
+        """
+        <div style="text-align: center; padding-top: 10px;">
+            <p style="font-size: 0.85em; color: #a3a8b8; margin-bottom: 5px;">
+                Architected & Engineered by
+            </p>
+            <p style="font-size: 1em; font-weight: 600; margin-bottom: 10px;">
+                Evan Gloria </p>
+            <a href="https://github.com/evan-gloria" target="_blank" style="text-decoration: none;">
+                <button style="background-color: #2e3138; color: white; border: none; padding: 8px 15px; border-radius: 5px; cursor: pointer; font-size: 0.85em; width: 100%;">
+                    🐙 View Architecture on GitHub
+                </button>
+            </a>
+        </div>
+        """, 
+        unsafe_allow_html=True
+    )
+
+    # 📝 Feedback Link
+    st.markdown(
+        """
+        <div style="text-align: center; margin-top: 15px;">
+            <a href="https://forms.gle/FHiJpDt8NhPd2rzG8" target="_blank" style="text-decoration: none; font-size: 0.9em; color: #4CAF50; font-weight: 600;">
+                📝 Leave App Feedback
+            </a>
+        </div>
+        """, 
+        unsafe_allow_html=True
+    )
 
 # --- TABS INITIALIZATION ---
 if not api_key:
