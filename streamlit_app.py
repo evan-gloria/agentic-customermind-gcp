@@ -147,7 +147,7 @@ with st.sidebar:
             </p>
             <p style="font-size: 1em; font-weight: 600; margin-bottom: 10px;">
                 Evan Gloria </p>
-            <a href="https://github.com/evan-gloria/agentic-customermind-gcp" target="_blank" style="text-decoration: none;">
+            <a href="https://github.com/evan-gloria/customermind-ai-microservices" target="_blank" style="text-decoration: none;">
                 <button style="background-color: #2e3138; color: white; border: none; padding: 8px 15px; border-radius: 5px; cursor: pointer; font-size: 0.85em; width: 100%;">
                     🐙 View Architecture on GitHub
                 </button>
