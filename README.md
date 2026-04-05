@@ -6,6 +6,10 @@ This repository contains the source code for an enterprise-grade, event-driven A
 
 Rather than a simple chatbot, this platform functions as a "Human-in-the-Loop" recommender system and analytics engine. It empowers marketing teams to generate hyper-personalized campaigns, forecast audience viability using **BigQuery ML**, and query the data warehouse using natural language.
 
+## 🎥 Project Demonstration
+
+[![Customermind AI Demo](https://img.youtube.com/vi/hCwWFriQwxQ/maxresdefault.jpg)](https://youtu.be/hCwWFriQwxQ)
+
 -----
 
 ## 🏗️ Core Capabilities
