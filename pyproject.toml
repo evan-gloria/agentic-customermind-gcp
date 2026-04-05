@@ -1,7 +1,7 @@
 [project]
-name = "agentic-customermind-gcp"
+name = "customermind-ai-microservices"
 version = "0.1.0"
-description = "Agentic AI Next-Best-Action pipeline on GCP"
+description = "A distributed, LLM-powered microservices architecture for deterministic marketing orchestration on Google Cloud."
 authors = [
     {name = "Evan G",email = "evan.f.l.gloria@gmail.com"}
 ]
@@ -23,3 +23,6 @@ dependencies = [
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.poetry]
+package-mode = false
